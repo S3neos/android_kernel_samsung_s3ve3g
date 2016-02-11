@@ -834,19 +834,14 @@ static void adreno_cleanup_pt(struct kgsl_device *device,
 	struct adreno_ringbuffer *rb = &adreno_dev->ringbuffer;
 
 	kgsl_mmu_unmap(pagetable, &rb->buffer_desc);
-	kgsl_mmu_put_gpuaddr(pagetable, &rb->buffer_desc);
 
 	kgsl_mmu_unmap(pagetable, &device->memstore);
-	kgsl_mmu_put_gpuaddr(pagetable, &device->memstore);
 
 	kgsl_mmu_unmap(pagetable, &adreno_dev->pwron_fixup);
-	kgsl_mmu_put_gpuaddr(pagetable, &adreno_dev->pwron_fixup);
 
 	kgsl_mmu_unmap(pagetable, &device->mmu.setstate_memory);
-	kgsl_mmu_put_gpuaddr(pagetable, &device->mmu.setstate_memory);
 
 	kgsl_mmu_unmap(pagetable, &adreno_dev->profile.shared_buffer);
-	kgsl_mmu_put_gpuaddr(pagetable, &adreno_dev->profile.shared_buffer);
 }
 
 static int adreno_setup_pt(struct kgsl_device *device,
@@ -1210,9 +1205,11 @@ static int adreno_iommu_setstate(struct kgsl_device *device,
 	 * after the command has been retired
 	 */
 	if (result)
-		kgsl_mmu_disable_clk_on_ts(&device->mmu, 0, false);
+		kgsl_mmu_disable_clk(&device->mmu,
+						KGSL_IOMMU_CONTEXT_USER);
 	else
-		kgsl_mmu_disable_clk_on_ts(&device->mmu, rb->global_ts, true);
+		kgsl_mmu_disable_clk_on_ts(&device->mmu, rb->global_ts,
+						KGSL_IOMMU_CONTEXT_USER);
 
 done:
 	kgsl_context_put(context);
@@ -1962,8 +1959,8 @@ static int adreno_init(struct kgsl_device *device)
 	/* Power down the device */
 	kgsl_pwrctrl_disable(device);
 
-	/* Certain targets need the fixup.  You know who you are */
-	if (adreno_is_a330v2(adreno_dev))
+	/* Enable the power on shader corruption fix for all A3XX targets */
+	if (adreno_is_a3xx(adreno_dev))
 		adreno_a3xx_pwron_fixup_init(adreno_dev);
 
 	set_bit(ADRENO_DEVICE_INITIALIZED, &adreno_dev->priv);
@@ -2341,15 +2338,33 @@ static int _ft_pagefault_policy_store(struct device *dev,
 				     const char *buf, size_t count)
 {
 	struct adreno_device *adreno_dev = _get_adreno_dev(dev);
-	int ret;
+	int ret = 0;
+	unsigned int policy = 0;
 	if (adreno_dev == NULL)
 		return 0;
 
 	mutex_lock(&adreno_dev->dev.mutex);
-	ret = _ft_sysfs_store(buf, count, &adreno_dev->ft_pf_policy);
+
+	/* MMU option changed call function to reset MMU options */
+	if (count != _ft_sysfs_store(buf, count, &policy))
+		ret = -EINVAL;
+
+	if (!ret) {
+		policy &= (KGSL_FT_PAGEFAULT_INT_ENABLE |
+				KGSL_FT_PAGEFAULT_GPUHALT_ENABLE |
+				KGSL_FT_PAGEFAULT_LOG_ONE_PER_PAGE |
+				KGSL_FT_PAGEFAULT_LOG_ONE_PER_INT);
+		ret = kgsl_mmu_set_pagefault_policy(&(adreno_dev->dev.mmu),
+				adreno_dev->ft_pf_policy);
+		if (!ret)
+			adreno_dev->ft_pf_policy = policy;
+	}
 	mutex_unlock(&adreno_dev->dev.mutex);
 
-	return ret;
+	if (!ret)
+		return count;
+	else
+		return 0;
 }
 
 /**
@@ -2640,12 +2655,56 @@ static int adreno_getproperty(struct kgsl_device *device,
 	return status;
 }
 
-static int adreno_setproperty(struct kgsl_device *device,
+static int adreno_set_constraint(struct kgsl_device *device,
+				struct kgsl_context *context,
+				struct kgsl_device_constraint *constraint)
+{
+	int status = 0;
+
+	switch (constraint->type) {
+	case KGSL_CONSTRAINT_PWRLEVEL: {
+		struct kgsl_device_constraint_pwrlevel pwr;
+
+		if (constraint->size != sizeof(pwr)) {
+			status = -EINVAL;
+			break;
+		}
+
+		if (copy_from_user(&pwr,
+				(void __user *)constraint->data,
+				sizeof(pwr))) {
+			status = -EFAULT;
+			break;
+		}
+		if (pwr.level >= KGSL_CONSTRAINT_PWR_MAXLEVELS) {
+			status = -EINVAL;
+			break;
+		}
+
+		context->pwr_constraint.type =
+				KGSL_CONSTRAINT_PWRLEVEL;
+		context->pwr_constraint.sub_type = pwr.level;
+		}
+		break;
+	case KGSL_CONSTRAINT_NONE:
+		context->pwr_constraint.type = KGSL_CONSTRAINT_NONE;
+		break;
+
+	default:
+		status = -EINVAL;
+		break;
+	}
+
+	return status;
+}
+
+static int adreno_setproperty(struct kgsl_device_private *dev_priv,
 				enum kgsl_property_type type,
 				void *value,
 				unsigned int sizebytes)
 {
 	int status = -EINVAL;
+	struct kgsl_device *device = dev_priv->device;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 
 	switch (type) {
@@ -2681,6 +2740,28 @@ static int adreno_setproperty(struct kgsl_device *device,
 			}
 
 			status = 0;
+		}
+		break;
+	case KGSL_PROP_PWR_CONSTRAINT: {
+			struct kgsl_device_constraint constraint;
+			struct kgsl_context *context;
+
+			if (sizebytes != sizeof(constraint))
+				break;
+
+			if (copy_from_user(&constraint, value,
+				sizeof(constraint))) {
+				status = -EFAULT;
+				break;
+			}
+
+			context = kgsl_context_get_owner(dev_priv,
+							constraint.context_id);
+			if (context == NULL)
+				break;
+			status = adreno_set_constraint(device, context,
+								&constraint);
+			kgsl_context_put(context);
 		}
 		break;
 	default:
@@ -3074,7 +3155,7 @@ static int adreno_waittimestamp(struct kgsl_device *device,
 		return -EINVAL;
 
 	ret = adreno_drawctxt_wait(ADRENO_DEVICE(device), context,
-		timestamp, msecs_to_jiffies(msecs));
+		timestamp, msecs);
 
 	/* If the context got invalidated then return a specific error */
 	drawctxt = ADRENO_CONTEXT(context);

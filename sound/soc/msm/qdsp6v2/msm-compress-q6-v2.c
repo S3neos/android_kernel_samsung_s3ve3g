@@ -1561,7 +1561,7 @@ static int msm_compr_add_volume_control(struct snd_soc_pcm_runtime *rtd)
 		 rtd->pcm->device, suffix);
 	fe_volume_control[0].name = mixer_str;
 	fe_volume_control[0].private_value = rtd->dai_link->be_id;
-	pr_debug("Registering new mixer ctl %s", mixer_str);
+	pr_debug("Registering new mixer ctl %s\n", mixer_str);
 	snd_soc_add_platform_controls(rtd->platform, fe_volume_control,
 				      ARRAY_SIZE(fe_volume_control));
 	kfree(mixer_str);
@@ -1681,7 +1681,6 @@ static struct snd_soc_platform_driver msm_soc_platform = {
 	.pcm_new	= msm_compr_new,
 	.controls       = msm_compr_gapless_controls,
 	.num_controls   = ARRAY_SIZE(msm_compr_gapless_controls),
-
 };
 
 static __devinit int msm_compr_dev_probe(struct platform_device *pdev)

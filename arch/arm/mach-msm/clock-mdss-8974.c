@@ -1105,10 +1105,10 @@ static int dsi_pll_enable_seq_m(void)
 	pll_locked = dsi_pll_toggle_lock_detect_and_check_status();
 	for (i = 0; (i < SEQ_M_MAX_COUNTER) && !pll_locked; i++) {
 		DSS_REG_W(mdss_dsi_base, DSI_0_PHY_PLL_UNIPHY_PLL_PWRGEN_CFG,
-			0x00);
+				0x00);
 		udelay(50);
 		DSS_REG_W(mdss_dsi_base,
-			DSI_0_PHY_PLL_UNIPHY_PLL_GLB_CFG, 0x05);
+					DSI_0_PHY_PLL_UNIPHY_PLL_GLB_CFG, 0x05);
 		udelay(100);
 		DSS_REG_W(mdss_dsi_base,
 			DSI_0_PHY_PLL_UNIPHY_PLL_GLB_CFG, 0x0f);
@@ -1138,8 +1138,6 @@ static int dsi_pll_enable_seq_d(void)
 	 */
 	DSS_REG_W(mdss_dsi_base, DSI_0_PHY_PLL_UNIPHY_PLL_PWRGEN_CFG, 0x00);
 	udelay(50);
-	DSS_REG_W(mdss_dsi_base, DSI_0_PHY_PLL_UNIPHY_PLL_GLB_CFG, 0x01);
-	udelay(200);
 	DSS_REG_W(mdss_dsi_base, DSI_0_PHY_PLL_UNIPHY_PLL_GLB_CFG, 0x05);
 	udelay(200);
 	DSS_REG_W(mdss_dsi_base, DSI_0_PHY_PLL_UNIPHY_PLL_GLB_CFG, 0x07);
@@ -1866,7 +1864,7 @@ static int edp_vco_set_rate(struct clk *c, unsigned long vco_rate)
 	struct edp_pll_vco_clk *vco = to_edp_vco_clk(c);
 	int rc = 0;
 
-	pr_debug("%s: vco_rate=%d\n", __func__, (int)vco_rate);
+	pr_info("%s: vco_rate=%d\n", __func__, (int)vco_rate);
 
 	rc = mdss_ahb_clk_enable(1);
 	if (rc) {
@@ -1877,7 +1875,7 @@ static int edp_vco_set_rate(struct clk *c, unsigned long vco_rate)
 	if (vco_rate == 810000000) {
 		DSS_REG_W(mdss_edp_base, 0x0c, 0x18);
 		/* UNIPHY_PLL_LKDET_CFG2 */
-		DSS_REG_W(mdss_edp_base, 0x64, 0x05);
+		DSS_REG_W(mdss_edp_base, 0x64, 0x0d);
 		/* UNIPHY_PLL_REFCLK_CFG */
 		DSS_REG_W(mdss_edp_base, 0x00, 0x00);
 		/* UNIPHY_PLL_SDM_CFG0 */
@@ -1899,7 +1897,7 @@ static int edp_vco_set_rate(struct clk *c, unsigned long vco_rate)
 		/* UNIPHY_PLL_SSC_CFG3 */
 		DSS_REG_W(mdss_edp_base, 0x58, 0x00);
 		/* UNIPHY_PLL_CAL_CFG0 */
-		DSS_REG_W(mdss_edp_base, 0x6c, 0x0a);
+		DSS_REG_W(mdss_edp_base, 0x6c, 0x12);
 		/* UNIPHY_PLL_CAL_CFG2 */
 		DSS_REG_W(mdss_edp_base, 0x74, 0x01);
 		/* UNIPHY_PLL_CAL_CFG6 */
@@ -1924,7 +1922,7 @@ static int edp_vco_set_rate(struct clk *c, unsigned long vco_rate)
 		DSS_REG_W(mdss_edp_base, 0x28, 0x00);
 	} else if (vco_rate == 1350000000) {
 		/* UNIPHY_PLL_LKDET_CFG2 */
-		DSS_REG_W(mdss_edp_base, 0x64, 0x05);
+		DSS_REG_W(mdss_edp_base, 0x64, 0x0d);
 		/* UNIPHY_PLL_REFCLK_CFG */
 		DSS_REG_W(mdss_edp_base, 0x00, 0x01);
 		/* UNIPHY_PLL_SDM_CFG0 */
@@ -1946,7 +1944,7 @@ static int edp_vco_set_rate(struct clk *c, unsigned long vco_rate)
 		/* UNIPHY_PLL_SSC_CFG3 */
 		DSS_REG_W(mdss_edp_base, 0x58, 0x00);
 		/* UNIPHY_PLL_CAL_CFG0 */
-		DSS_REG_W(mdss_edp_base, 0x6c, 0x0a);
+		DSS_REG_W(mdss_edp_base, 0x6c, 0x12);
 		/* UNIPHY_PLL_CAL_CFG2 */
 		DSS_REG_W(mdss_edp_base, 0x74, 0x01);
 		/* UNIPHY_PLL_CAL_CFG6 */
@@ -2005,7 +2003,7 @@ static int edp_pll_ready_poll(void)
 		if (status)
 			break;
 	}
-	pr_debug("%s: cnt=%d status=%d\n", __func__, cnt, (int)status);
+	pr_info("%s: cnt=%d status=%d\n", __func__, cnt, (int)status);
 
 	if (status)
 		return 1;
@@ -2124,7 +2122,7 @@ static long edp_vco_round_rate(struct clk *c, unsigned long rate)
 		lp++;
 	}
 
-	pr_debug("%s: rrate=%d\n", __func__, (int)rrate);
+	pr_info("%s: rrate=%d\n", __func__, (int)rrate);
 
 	return rrate;
 }
@@ -2133,7 +2131,7 @@ static int edp_vco_prepare(struct clk *c)
 {
 	struct edp_pll_vco_clk *vco = to_edp_vco_clk(c);
 
-	pr_debug("%s: rate=%d\n", __func__, (int)vco->rate);
+	pr_info("%s: rate=%d\n", __func__, (int)vco->rate);
 
 	return edp_vco_set_rate(c, vco->rate);
 }
@@ -2222,10 +2220,10 @@ static unsigned long edp_mainlink_get_rate(struct clk *c)
 
 	if (pclk->ops->get_rate) {
 		rate = pclk->ops->get_rate(pclk);
-		rate /= mclk->data.div;
+	rate /= mclk->data.div;
 	}
 
-	pr_debug("%s: rate=%d div=%d\n", __func__, (int)rate, mclk->data.div);
+	pr_info("%s: rate=%d div=%d\n", __func__, (int)rate, mclk->data.div);
 
 	return rate;
 }
@@ -2237,7 +2235,7 @@ struct div_clk edp_mainlink_clk_src = {
 	.ops = &fixed_5div_ops,
 	.data = {
 		.div = 5,
-	},
+	},	
 	.c = {
 		.parent = &edp_vco_clk.c,
 		.dbg_name = "edp_mainlink_clk_src",
@@ -2267,7 +2265,7 @@ static int edp_pixel_set_div(struct div_clk *clk, int div)
 		return rc;
 	}
 
-	pr_debug("%s: div=%d\n", __func__, div);
+	pr_info("%s: div=%d\n", __func__, div);
 	DSS_REG_W(mdss_edp_base, 0x24, (div - 1)); /* UNIPHY_PLL_POSTDIV2_CFG */
 
 	mdss_ahb_clk_enable(0);
@@ -2279,12 +2277,12 @@ static int edp_pixel_get_div(struct div_clk *clk)
 	int div = 0;
 
 	if (mdss_ahb_clk_enable(1)) {
-		pr_debug("%s: Failed to enable mdss ahb clock\n", __func__);
+		pr_info("%s: Failed to enable mdss ahb clock\n", __func__);
 		return 1;
 	}
 	div = DSS_REG_R(mdss_edp_base, 0x24); /* UNIPHY_PLL_POSTDIV2_CFG */
 	div &= 0x01;
-	pr_debug("%s: div=%d\n", __func__, div);
+	pr_info("%s: div=%d\n", __func__, div);
 	mdss_ahb_clk_enable(0);
 	return div + 1;
 }
